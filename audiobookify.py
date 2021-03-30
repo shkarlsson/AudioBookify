@@ -7,11 +7,10 @@ import pyttsx3
 from time import sleep
 
 # %%
-VOICE_NAME = 'Karen'
-FILE_SPLIT_DELIMITER = 'Chapter '
+VOICE_NAME = 'Karen' #Choose which voice to use
 root_dir = os.path.dirname(os.path.abspath(__file__))+'/'
-filename = [f for f in os.listdir(root_dir+'pdf') if '.pdf' in f[-4:]][0] #Gets the first pdf file in this directory
-fd = open(root_dir + 'pdf/' + filename, "rb")
+filename = [f for f in os.listdir(root_dir) if '.pdf' in f[-4:]][0] #Gets the first pdf file in this directory
+fd = open(root_dir + filename, "rb")
 viewer = pdfreader.SimplePDFViewer(fd)
 test = input(f'Test different voices? (y) (Else I will go with {VOICE_NAME})') == 'y'
 
@@ -96,7 +95,7 @@ for word in s2.split(' '):
 
 
 txt = ' '.join(s3)
-f = open(root_dir + 'txt/' + filename[:-4] + '.txt', "w")
+f = open(root_dir + filename[:-4] + '.txt', "w")
 f.write(txt)
 f.close()
 
@@ -109,14 +108,14 @@ if test == True:
 	for voice in voices:
 		engine.setProperty('voice', voice.id)
 		#engine.say(txt[100:400])
-		engine.save_to_file(txt[200:1000],root_dir + 'test/' + voice.name + '.mp3')
+		engine.save_to_file(txt[200:1000],root_dir + 'test_' + voice.name + '.mp3')
 		engine.runAndWait()
 		sleep(1)
 
 else:
 	voice = [v for v in engine.getProperty('voices') if v.name == VOICE_NAME][0]
 	engine.setProperty('voice', voice.id)
-	d = root_dir + 'mp3/' + filename[:-4] + '_' + VOICE_NAME.lower() + '.mp3'
+	d = root_dir + filename[:-4] + '_' + VOICE_NAME.lower() + '.mp3'
 	engine.save_to_file(txt, d)
 	engine.runAndWait()
 	engine.stop()
