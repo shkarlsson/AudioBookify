@@ -7,14 +7,17 @@ import pyttsx3
 from time import sleep
 
 # %%
+
+#The pdf that this thing has been delevoped on can be found here: https://ia903205.us.archive.org/11/items/prime_intellect/prime_intellect.pdf
+
 VOICE_NAME = 'Karen' #Choose which voice to use
 root_dir = os.path.dirname(os.path.abspath(__file__))+'/'
-filename = [f for f in os.listdir(root_dir) if '.pdf' in f[-4:]][0] #Gets the first pdf file in this directory
+filename = [f for f in os.listdir(root_dir) if '.pdf' in f[-4:]][0] #Gets the first pdf file in the project directory. 
 fd = open(root_dir + filename, "rb")
 viewer = pdfreader.SimplePDFViewer(fd)
-test = input(f'Test different voices? (y) (Else I will go with {VOICE_NAME})') == 'y'
+TEST = False #Change to true if you want to save sample mp3s of all available voices on your system.
 
-#%% Reading pdf and saving to string.
+#%% Reading pdf and saving to txt file.
 i = 0
 end_reached = False
 s = ''
@@ -29,28 +32,33 @@ while not end_reached:
 		end_reached = True
 
 print(f'Done. {len(s)} characters have been read.')
-# %% Cleaning up string.
+
+f = open(root_dir + filename[:-4] + '_direct_read.txt', "w")
+f.write(s)
+f.close()
+
+# %% Cleaning up string. (This is adapted for one specific pdf and need to be adapted according to the pdf you use as input.)
 s2 = re.sub('The Metamorphosis of Prime Intellect: Chapter 1http://www.kuro5hin.org/prime-intellect/mopiall.html[0-9]+ of 13423/03/08 23:03', ' ', s)
 
-s2 = re.sub('(?<=[a-z])(?=[A-Z])',' ',s2) #Separating chapter title endings from begining of chapter text
-s2 = re.sub('  \* (?=Chapter .+:   )','\n\n',s2) #Spacing chapter beginnings
+s2 = re.sub('(?<=[a-z])(?=[A-Z])',' ', s2) #Separating chapter title endings from begining of chapter text
+s2 = re.sub('  \* (?=Chapter .+:   )',' \n\n', s2) #Spacing chapter beginnings
 s2 = re.sub('(?<=(\.|\?|\!))(?=\"?[A-z])',' ', s2) #Adding missing spaces after sentences
-#s2 = re.sub('(?<=(\.|\?|\!))(?=\"[A-z])')
 s2 = re.sub('(?<=(\,|\;))(?=[A-z])',' ', s2) #Adding missing spaces in sentences
 s2 = re.sub('(\*|\>)', '\n- ', s2) #Standardizing dialogue character
-s2 = re.sub('(?<=\")(?=\")', '\n ', s2) # Spacing dialogue
-s2 = s2.replace(',"', '",')
-#s2 = re.sub('(?<=- )(.+)\"', r'\1',s2)
+s2 = re.sub('(?<=\")(?=\")', ' \n', s2) # Spacing dialogue
 
-names = ['caroline', 'timothy', 'mamba', 'glasslike']
-names += [n+'s' for n in names]
+s2 = re.sub(',\"', '\",', s2) #Relocating quotes that ended up on wrong sides of commas
+s2 = re.sub('\? \"(?=[A-Z])','\?\" ', s2)  #Relocating quotes that ended up on wrong sides of spaces
+
+names = ['caroline', 'timothy', 'mamba', 'glasslike'] #These are some words that occur in the book that SpellChecker doesn't recognize. Do adjust according to the source pdf.
+names += [n+'s' for n in names] #Adding possesives
 spell = SpellChecker()
 spell.word_frequency.load_words(names)
 
-
 #Doing a bit of complicated text cleanup of mess caused by pdfreader not interpreting linebreaks as anything.
 
-def get_most_probably_split(word):
+def get_most_probable_split(word):
+	#This tests all ways of splitting a word into two and returns the most likely split as a list with lengt 2.
 	max_prob = 0
 	max_prob_i = 0
 	max_p1, max_p2 = 0, 0
@@ -63,31 +71,39 @@ def get_most_probably_split(word):
 			max_prob = prob
 			max_prob_i = int(i)
 			max_p1, max_p2 = p1, p2
-	#print(clean_word, '--->',clean_word[:max_prob_i], clean_word[max_prob_i:])
-	#print(word, '--->',word[:max_prob_i], word[max_prob_i:], '(', f'{max_p1:.0e}', f'{max_p2:.0e}', ')', i)
 	return [word[:max_prob_i], word[max_prob_i:]]
 
+#Splitting inacurately joined words with the help of SpellChecker...
+wrong_word_prob_cutoff = 10 ** (-7)
+
+def double_word_splitter(word,sep):
+	#This splits words that use some kind of separator, runs get_most_probable_split() on each sub-word, and then joins the words together again with the original separator.
+	d_w = []
+	for sub_word in word.split(sep):
+		clean_sub_word = re.sub('[^a-zA-Z]+', '', sub_word).lower()
+		if len(clean_sub_word) > 0:
+			if spell.word_probability(clean_sub_word) <= wrong_word_prob_cutoff:
+				d_w.append(' '.join(get_most_probable_split(sub_word)))
+			else:
+				d_w += [sub_word]
+		else:
+			d_w.append(sub_word)
+	d_w = sep.join(d_w)
+	return [d_w]
 
 s3 = []
-for word in s2.split(' '):
+for word in s2.split(' '): #Looping through all the words in the book.
 	clean_word = re.sub('[^a-zA-Z]+', '', word).lower()
 	if len(clean_word) > 0:
+		#Dealing with words with hyphens
 		if '-' in word[:-1]:
-			hyphen_word = []
-			for sub_word in word.split('-'):
-				clean_sub_word = re.sub('[^a-zA-Z]+', '', sub_word).lower()
-				if len(clean_sub_word) > 0:
-					if spell.word_probability(clean_sub_word) == 0:
-						hyphen_word.append(' '.join(get_most_probably_split(sub_word)))
-					else:
-						hyphen_word.append(sub_word)
-				else:
-					hyphen_word.append(sub_word)
-			hyphen_word = '-'.join(hyphen_word)
-			s3 += [hyphen_word]
+			s3 += double_word_splitter(word,'-')
+		elif '_' in word[:-1]:
+			s3 += double_word_splitter(word,'_')
+		#Dealing with non-hyphen words
 		else:
-			if spell.word_probability(clean_word) == 0:
-				s3 += get_most_probably_split(word)
+			if spell.word_probability(clean_word) <= wrong_word_prob_cutoff:
+				s3 += get_most_probable_split(word)
 			else:
 				s3 += [word]
 	else:
@@ -103,7 +119,7 @@ f.close()
 
 engine = pyttsx3.init()
 
-if test == True:
+if TEST:
 	voices = engine.getProperty('voices')
 	for voice in voices:
 		engine.setProperty('voice', voice.id)
